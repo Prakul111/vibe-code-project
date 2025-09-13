@@ -1,38 +1,50 @@
 import { z } from "zod";
 
-import { createAgent, createNetwork, createTool, gemini } from '@inngest/agent-kit';
+import { createAgent, createNetwork, createTool, type Tool } from '@inngest/agent-kit';
 
-import { Result, Sandbox } from "@e2b/code-interpreter";
+import { Sandbox } from "@e2b/code-interpreter";
 
 import { inngest } from "./client";
 
 import { getSandbox, lastAssistantTextMessageContent } from './utils';
 
 import { PROMPT } from "@/promt";
+import { prisma } from "@/lib/db";
+import { gemini } from "inngest";
 
 
 
-export const helloWorld = inngest.createFunction(
-    { id: "hello-world" },
-    { event: "test/hello.world" },
+interface AgentState {
+    summary: string,
+    files: { [path: string]: string };
+}
+
+
+export const codeAgentFunction = inngest.createFunction(
+    { id: "code-agent" },
+    { event: "code-agent/run" },
     async ({ event, step }) => {
         const sandboxId = await step.run("get-sandbox-id", async () => {
             const sandbox = await Sandbox.create("vibe-next-dev-2")
             return sandbox.sandboxId;
         })
 
-        const codeAgent = createAgent({
+
+        const codeAgent = createAgent<AgentState>({
             name: 'code-agent',
             description: "An expert coding agent",
             system: PROMPT,
-            model: gemini({ model: 'gemini-1.5-flash' }),
+            model: gemini({
+                model: 'gemini-1.5-flash',
+            }) as any,
             tools: [
                 createTool({
                     name: "terminal",
-                    description: "Use the terminal  to run commands.",
+                    description: "Use the terminal  to run commands",
                     parameters: z.object({
                         command: z.string(),
                     }) as any,
+
                     handler: async ({ command }, { step }) => {
                         return await step?.run("termianl", async () => {
                             const buffers = { stdout: "", stderr: "" };
@@ -47,7 +59,9 @@ export const helloWorld = inngest.createFunction(
                                         buffers.stderr += data;
                                     },
                                 });
+
                                 return result.stdout;
+
                             } catch (error) {
                                 console.error(
                                     `Command failed: ${error} \nstdout: ${buffers.stdout}\nstderr: ${buffers.stderr}`,
@@ -57,9 +71,10 @@ export const helloWorld = inngest.createFunction(
                         });
                     },
                 }),
+
                 createTool({
                     name: "createOrUpdateFile",
-                    description: "Create or update a file in the next.js project.",
+                    description: "Create or update a file in the sandbox",
                     parameters: z.object({
                         files: z.array(
                             z.object({
@@ -68,14 +83,9 @@ export const helloWorld = inngest.createFunction(
                             }),
                         )
                     }) as any,
-                    handler: async ({ files }, { step, network }) => {
-                        /**
-                         * {
-                         * "/app.tsx": "<p>app page</p>",
-                         * "button.tsx": "<button>Click me</button>"
-                         * }
-                         */
 
+
+                    handler: async ({ files }, { step, network }: Tool.Options<AgentState>) => {
                         const newFiles = await step?.run("createOrUpdateFile", async () => {
                             try {
                                 const updatedFiles = network.state.data.files || {};
@@ -103,6 +113,7 @@ export const helloWorld = inngest.createFunction(
                     parameters: z.object({
                         files: z.array(z.string()),
                     }) as any,
+
                     handler: async ({ files }, { step }) => {
                         return await step?.run("readFiles", async () => {
                             try {
@@ -120,6 +131,7 @@ export const helloWorld = inngest.createFunction(
                     }
                 })
             ],
+
             lifecycle: {
                 onResponse: async ({ result, network }) => {
                     const lastAssistantMessageText =
@@ -136,7 +148,7 @@ export const helloWorld = inngest.createFunction(
             }
         });
 
-        const network = createNetwork({
+        const network = createNetwork<AgentState>({
             name: "coding-agent-network",
             agents: [codeAgent],
             maxIter: 15,
@@ -150,7 +162,12 @@ export const helloWorld = inngest.createFunction(
             },
         });
 
-        const result = await network.run(event.data.value)
+        const result = await network.run(event.data.value);
+
+        const isError =
+            !result.state.data.summary ||
+            Object.keys(result.state.data.files || {}).length === 0;
+
 
 
         const sandboxUrl = await step.run("get-sandbox-url", async () => {
@@ -159,6 +176,33 @@ export const helloWorld = inngest.createFunction(
             return `https://${host}`;
         })
 
+        await step.run("save-result", async () => {
+            if (isError) {
+                return await prisma.message.create({
+                    data: {
+                        content: "something went wrong, please try again",
+                        role: "ASSISTANT",
+                        type: "ERROR"
+                    }
+                })
+            }
+            await step.run("save-run", async () => {
+                return await prisma.message.create({
+                    data: {
+                        content: result.state.data.summary,
+                        role: "ASSISTANT",
+                        type: "RESULT",
+                        fragment: {
+                            create: {
+                                sandboxUrl: sandboxUrl,
+                                title: "Fragment",
+                                file: result.state.data.files,
+                            }
+                        }
+                    },
+                });
+            })
+        })
         return {
             url: sandboxUrl,
             title: "Fragment",
@@ -167,5 +211,7 @@ export const helloWorld = inngest.createFunction(
         };
     },
 );
+
+
 
 
