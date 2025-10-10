@@ -35,7 +35,7 @@ export const ProjectView = ({ projectId }: Props) => {
                 defaultSize={65}
                 minSize={50} 
                 >
-            TODO: Preview
+                    { !!activeFragment && <FragmentWeb data={activeFragment} />}
                 </ResizablePanel>
             </ResizablePanelGroup>
         </div>
