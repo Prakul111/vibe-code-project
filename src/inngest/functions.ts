@@ -10,7 +10,7 @@ import { getSandbox, lastAssistantTextMessageContent } from './utils';
 
 import { PROMPT } from "@/promt";
 import { prisma } from "@/lib/db";
-import { gemini } from "inngest";
+import { gemini, } from "inngest";
 
 
 
@@ -29,13 +29,12 @@ export const codeAgentFunction = inngest.createFunction(
             return sandbox.sandboxId;
         })
 
-
         const codeAgent = createAgent<AgentState>({
             name: 'code-agent',
             description: "An expert coding agent",
             system: PROMPT,
             model: gemini({
-                model: 'gemini-1.5-flash',
+                model: 'gemini-2.5-flash',
             }) as any,
             tools: [
                 createTool({
