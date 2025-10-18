@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { Hint } from "@/components/ui/hint";
+import { Hint } from "@/components/hint";
 import { Fragment } from "@/generated/prisma" 
 import { ExternalLinkIcon, RefreshCcwIcon } from "lucide-react";
 import { useState } from "react";
