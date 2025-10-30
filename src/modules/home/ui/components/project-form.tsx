@@ -43,7 +43,9 @@ export const ProjectForm = () => {
             queryClient.invalidateQueries(
                 trpc.projects.getMany.queryOptions()
             );
-            // Todo usage status
+            queryClient.invalidateQueries(
+                trpc.usage.status.queryOptions()
+            )
             router.push(`/projects/${data.id}`)
         },
         onError: (error) => {
@@ -51,7 +53,10 @@ export const ProjectForm = () => {
             if(error.data?.code === "UNAUTHORIZED") {
                 clerk.openSignIn()
             }
-            // Todo redirect to pricing page if specififc error
+            
+            if (error.data?.code === "TOO_MANY_REQUESTS") {
+                router.push("/pricing")
+            }
         }
     }))
 
