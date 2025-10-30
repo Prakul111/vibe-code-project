@@ -1,10 +1,12 @@
 import { projectsRouter } from "@/modules/projects/server/procedures";
 import { messageRouter } from "@/modules/messages/server/procedures";
 import { createTRPCRouter } from "../init";
+import { usageRouter } from "@/modules/usage/server/procedure";
 
 export const appRouter = createTRPCRouter({
     messages: messageRouter,
     projects: projectsRouter,
+    usage: usageRouter,
 
 });
 
